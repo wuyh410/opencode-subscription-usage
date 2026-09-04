@@ -2,6 +2,8 @@
 
 [English](#english) | [简体中文](#简体中文)
 
+![OpenCode Codex usage sidebar preview](pic/screen.png)
+
 ## English
 
 A TUI plugin that displays ChatGPT Codex subscription usage in the OpenCode sidebar.
