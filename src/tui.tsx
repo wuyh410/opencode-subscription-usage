@@ -5,8 +5,9 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { createMemo, createSignal, Match, Switch, type Accessor } from "solid-js"
 
-const REFRESH_INTERVAL_MS = 5 * 60 * 1000
+const REFRESH_INTERVAL_MS = 60 * 1000
 const REQUEST_TIMEOUT_MS = 10 * 1000
+const POST_SESSION_REFRESH_DELAYS_MS = [2_000, 15_000]
 
 type LimitWindow = {
   usedPercent: number
@@ -159,9 +160,15 @@ function UsageView(props: { api: TuiPluginApi; state: Accessor<UsageState> }) {
 const tui = async (api: TuiPluginApi) => {
   const [state, setState] = createSignal<UsageState>({ status: "loading" })
   let activeRequest: Promise<void> | undefined
+  let refreshAgain = false
+  let disposed = false
+  const pendingRefreshes = new Set<ReturnType<typeof setTimeout>>()
 
   const refresh = () => {
-    if (activeRequest) return activeRequest
+    if (activeRequest) {
+      refreshAgain = true
+      return activeRequest
+    }
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     activeRequest = fetchUsage(controller.signal)
@@ -180,8 +187,24 @@ const tui = async (api: TuiPluginApi) => {
       .finally(() => {
         clearTimeout(timeout)
         activeRequest = undefined
+        if (refreshAgain && !disposed) {
+          refreshAgain = false
+          void refresh()
+        }
       })
     return activeRequest
+  }
+
+  const schedulePostSessionRefresh = () => {
+    for (const timer of pendingRefreshes) clearTimeout(timer)
+    pendingRefreshes.clear()
+    for (const delay of POST_SESSION_REFRESH_DELAYS_MS) {
+      const timer = setTimeout(() => {
+        pendingRefreshes.delete(timer)
+        void refresh()
+      }, delay)
+      pendingRefreshes.add(timer)
+    }
   }
 
   api.slots.register({
@@ -194,9 +217,13 @@ const tui = async (api: TuiPluginApi) => {
   })
 
   const interval = setInterval(() => void refresh(), REFRESH_INTERVAL_MS)
-  const stopIdleRefresh = api.event.on("session.idle", () => void refresh())
+  const stopIdleRefresh = api.event.on("session.idle", schedulePostSessionRefresh)
   api.lifecycle.onDispose(() => {
+    disposed = true
+    refreshAgain = false
     clearInterval(interval)
+    for (const timer of pendingRefreshes) clearTimeout(timer)
+    pendingRefreshes.clear()
     stopIdleRefresh()
   })
 
