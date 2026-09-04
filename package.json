@@ -1,0 +1,77 @@
+{
+  "name": "opencode-codex-usage",
+  "version": "0.1.0",
+  "description": "Display ChatGPT Codex 5-hour and weekly usage in the OpenCode sidebar.",
+  "type": "module",
+  "exports": {
+    "./tui": {
+      "types": "./dist/tui.d.ts",
+      "import": "./dist/tui.js"
+    }
+  },
+  "bin": {
+    "opencode-codex-usage": "./bin/opencode-codex-usage.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "install.ps1",
+    "lib",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test",
+    "prepack": "npm test"
+  },
+  "keywords": [
+    "opencode",
+    "codex",
+    "chatgpt",
+    "usage",
+    "tui-plugin"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "opencode": ">=1.18.23"
+  },
+  "dependencies": {
+    "jsonc-parser": "3.3.1"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18.23",
+    "@opentui/core": ">=0.4.5",
+    "@opentui/keymap": ">=0.4.5",
+    "@opentui/solid": ">=0.4.5",
+    "solid-js": ">=1.9.12"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/keymap": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.18.23",
+    "@opentui/core": "0.4.5",
+    "@opentui/keymap": "0.4.5",
+    "@opentui/solid": "0.4.5",
+    "@types/node": "24.12.2",
+    "solid-js": "1.9.12",
+    "typescript": "5.8.2"
+  }
+}

@@ -1,0 +1,12 @@
+dist/
+node_modules/
+*.tgz
+.env
+.env.*
+!.env.example
+.npmrc
+auth.json
+*.key
+*.pem
+*.p12
+*.pfx
