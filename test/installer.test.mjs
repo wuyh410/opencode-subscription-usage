@@ -28,6 +28,7 @@ test("install and uninstall preserve JSONC comments and unrelated plugins", asyn
     assert.match(installedText, /Keep this plugin/)
     assert.deepEqual(installed.plugin, ["another-plugin", MANAGED_SPEC])
     assert.equal(await readFile(first.pluginPath, "utf8").then((value) => value.length > 0), true)
+    assert.equal(await readFile(first.usagePath, "utf8").then((value) => value.length > 0), true)
 
     await uninstall({ configDir })
     const uninstalledText = await readFile(configPath, "utf8")
@@ -35,6 +36,7 @@ test("install and uninstall preserve JSONC comments and unrelated plugins", asyn
     assert.match(uninstalledText, /Keep this plugin/)
     assert.deepEqual(uninstalled.plugin, ["another-plugin"])
     await assert.rejects(readFile(first.pluginPath), { code: "ENOENT" })
+    await assert.rejects(readFile(first.usagePath), { code: "ENOENT" })
   } finally {
     await rm(configDir, { recursive: true, force: true })
   }

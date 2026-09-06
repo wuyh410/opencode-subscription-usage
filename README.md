@@ -19,6 +19,7 @@ A TUI plugin that displays ChatGPT Codex subscription usage in the OpenCode side
 
 - Shows the percentage used for the 5-hour and weekly Codex limits
 - Shows both reset times in your local time zone
+- Stays hidden when Codex is not logged in, and appears automatically after login
 - Fetches usage when OpenCode starts
 - Refreshes about 2 seconds and 15 seconds after a session becomes idle, allowing for usage-reporting delay
 - Refreshes every minute as a fallback
@@ -80,11 +81,12 @@ opencode-codex-usage uninstall
 npm uninstall --global opencode-codex-usage
 ```
 
-If installed without Node.js, remove the following plugin file and its exact entry from the `plugin` array
-in `tui.json` or `tui.jsonc`:
+If installed without Node.js, remove the following plugin files and the sidebar entry from the `plugin`
+array in `tui.json` or `tui.jsonc`:
 
 ```text
 ~/.config/opencode/tui-plugins/codex-usage-sidebar.js
+~/.config/opencode/tui-plugins/codex-usage.js
 ./tui-plugins/codex-usage-sidebar.js
 ```
 
@@ -109,16 +111,10 @@ change without notice.
 
 #### The sidebar is missing
 
-Restart OpenCode and widen the terminal. OpenCode hides the sidebar when the terminal is too narrow.
-
-#### `Connect OpenAI with ChatGPT Plus/Pro`
-
-Connect OpenAI in OpenCode and select the `ChatGPT Plus/Pro` login method.
-
-#### `OpenAI login expired`
-
-Send a normal OpenAI model request in OpenCode so OpenCode can refresh its OAuth token. The plugin retries
-after the session finishes and during the next periodic refresh.
+Confirm that OpenAI is connected in OpenCode with the `ChatGPT Plus/Pro` login method, then widen the
+terminal. The plugin stays hidden while Codex is logged out, and OpenCode hides the sidebar when the
+terminal is too narrow. If the login expired, reconnect OpenAI or send a normal OpenAI model request so
+OpenCode can refresh its OAuth token.
 
 #### Usage does not change immediately
 
@@ -150,6 +146,7 @@ configuration.
 
 - 显示 Codex 5 小时和每周额度的已使用百分比
 - 按本地时区显示两个额度窗口的重置时间
+- 未登录 Codex 时自动隐藏，登录后自动显示
 - OpenCode 启动时查询用量
 - 会话进入空闲状态约 2 秒和 15 秒后刷新，以兼顾上游用量统计延迟
 - 每分钟进行一次兜底刷新
@@ -212,10 +209,11 @@ npm uninstall --global opencode-codex-usage
 ```
 
 如果使用免 Node.js 方式安装，请删除以下插件文件，并从 `tui.json` 或 `tui.jsonc` 的 `plugin`
-数组中删除对应的精确配置项：
+数组中删除侧边栏对应的配置项：
 
 ```text
 ~/.config/opencode/tui-plugins/codex-usage-sidebar.js
+~/.config/opencode/tui-plugins/codex-usage.js
 ./tui-plugins/codex-usage-sidebar.js
 ```
 
@@ -239,16 +237,9 @@ ChatGPT/Codex 的内部接口，不是公开文档化的 API，其地址或响�
 
 #### 侧边栏没有出现
 
-重新启动 OpenCode，并增大终端宽度。终端过窄时 OpenCode 会隐藏侧边栏。
-
-#### 显示 `Connect OpenAI with ChatGPT Plus/Pro`
-
-在 OpenCode 中连接 OpenAI，并选择 `ChatGPT Plus/Pro` 登录方式。
-
-#### 显示 `OpenAI login expired`
-
-在 OpenCode 中正常发送一次 OpenAI 模型请求，让 OpenCode 刷新 OAuth Token。插件会在会话结束后
-和后续定时刷新时重试。
+确认已在 OpenCode 中通过 `ChatGPT Plus/Pro` 登录方式连接 OpenAI，然后增大终端宽度。未登录
+Codex 时插件会保持隐藏，终端过窄时 OpenCode 也会隐藏侧边栏。如果登录已过期，请重新连接
+OpenAI，或正常发送一次 OpenAI 模型请求，让 OpenCode 刷新 OAuth Token。
 
 #### 用量没有立即变化
 

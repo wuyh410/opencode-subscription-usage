@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ManagedSpec = "./tui-plugins/codex-usage-sidebar.js"
 $SourcePlugin = Join-Path $PSScriptRoot "dist/tui.js"
+$SourceUsageModule = Join-Path $PSScriptRoot "dist/codex-usage.js"
 $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 function Get-DefaultConfigDir {
@@ -308,6 +309,9 @@ if (-not $ConfigDir) {
 if (-not (Test-Path -LiteralPath $SourcePlugin -PathType Leaf)) {
   throw "Built plugin not found: $SourcePlugin"
 }
+if (-not (Test-Path -LiteralPath $SourceUsageModule -PathType Leaf)) {
+  throw "Built plugin module not found: $SourceUsageModule"
+}
 
 $jsoncPath = Join-Path $ConfigDir "tui.jsonc"
 $jsonPath = Join-Path $ConfigDir "tui.json"
@@ -349,6 +353,7 @@ $pluginDir = Join-Path $ConfigDir "tui-plugins"
 $pluginPath = Join-Path $pluginDir "codex-usage-sidebar.js"
 [System.IO.Directory]::CreateDirectory($pluginDir) | Out-Null
 Copy-Item -LiteralPath $SourcePlugin -Destination $pluginPath -Force
+Copy-Item -LiteralPath $SourceUsageModule -Destination (Join-Path $pluginDir "codex-usage.js") -Force
 
 if ($null -ne $newContent) {
   [System.IO.Directory]::CreateDirectory($ConfigDir) | Out-Null
