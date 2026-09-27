@@ -1,7 +1,3 @@
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-
 export type LimitWindow = {
   usedPercent: number
   resetAt: number
@@ -12,10 +8,10 @@ export type Usage = {
   weekly: LimitWindow
 }
 
-type OAuthCredential = {
+export type OAuthCredential = {
   type?: string
   access?: string
-  accountId?: string
+  metadata?: Record<string, unknown>
 }
 
 type UsageResponse = {
@@ -49,29 +45,15 @@ function parseWindow(value: unknown, name: string): LimitWindow {
   return { usedPercent, resetAt }
 }
 
-async function readOpenAIAuth(): Promise<OAuthCredential | undefined> {
-  const injected = process.env.OPENCODE_AUTH_CONTENT
-  if (injected !== undefined) return (JSON.parse(injected) as { openai?: OAuthCredential }).openai
-
-  try {
-    const content = await readFile(join(homedir(), ".local", "share", "opencode", "auth.json"), "utf8")
-    return (JSON.parse(content) as { openai?: OAuthCredential }).openai
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
-    throw error
-  }
-}
-
-export async function fetchUsage(signal: AbortSignal): Promise<Usage | undefined> {
-  const credential = await readOpenAIAuth()
+export async function fetchUsage(credential: OAuthCredential | undefined, signal: AbortSignal): Promise<Usage | undefined> {
   if (credential?.type !== "oauth" || !credential.access) return undefined
 
   const headers: Record<string, string> = {
     Accept: "application/json",
     Authorization: `Bearer ${credential.access}`,
   }
-  const accountId = credential.accountId ?? accountIdFromToken(credential.access)
-  if (accountId) headers["ChatGPT-Account-Id"] = accountId
+  const accountId = credential.metadata?.accountId ?? accountIdFromToken(credential.access)
+  if (typeof accountId === "string" && accountId) headers["ChatGPT-Account-Id"] = accountId
 
   const response = await fetch("https://chatgpt.com/backend-api/wham/usage", { headers, signal })
   if (response.status === 401) return undefined

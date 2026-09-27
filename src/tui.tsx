@@ -1,7 +1,8 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch, type Accessor } from "solid-js"
-import { fetchUsage, type Usage } from "./codex-usage.js"
+import type { Usage } from "./codex-usage.js"
+import { CodexUsage } from "./rpc.js"
 
 const REFRESH_INTERVAL_MS = 60 * 1000
 const REQUEST_TIMEOUT_MS = 10 * 1000
@@ -23,8 +24,8 @@ function percent(value: number) {
   return `${Math.round(value)}% used`
 }
 
-function UsageView(props: { api: TuiPluginApi; state: Accessor<UsageState> }) {
-  const theme = () => props.api.theme.current
+function UsageView(props: { api: Plugin.Context; state: Accessor<UsageState> }) {
+  const theme = () => props.api.theme.text
   const error = createMemo(() => {
     const state = props.state()
     return state.status === "error" ? state.message : undefined
@@ -34,20 +35,20 @@ function UsageView(props: { api: TuiPluginApi; state: Accessor<UsageState> }) {
     return state.status === "ready" ? state.usage : undefined
   })
   const color = (value: number) => {
-    if (value >= 90) return theme().error
-    if (value >= 75) return theme().warning
-    return theme().textMuted
+    if (value >= 90) return theme().feedback.error.base
+    if (value >= 75) return theme().feedback.warning.base
+    return theme().muted
   }
 
   return (
     <box>
-      <text fg={theme().text}>
+      <text fg={theme().base}>
         <b>Codex usage</b>
       </text>
       <Switch>
         <Match when={error()}>
           {(message) => (
-            <text fg={theme().error} wrapMode="word">
+            <text fg={theme().feedback.error.base} wrapMode="word">
               {message()}
             </text>
           )}
@@ -56,15 +57,15 @@ function UsageView(props: { api: TuiPluginApi; state: Accessor<UsageState> }) {
           {(current) => (
             <>
               <box flexDirection="row" justifyContent="space-between">
-                <text fg={theme().textMuted}>5h</text>
+                <text fg={theme().muted}>5h</text>
                 <text fg={color(current().fiveHour.usedPercent)}>{percent(current().fiveHour.usedPercent)}</text>
               </box>
-              <text fg={theme().textMuted}>Resets {resetTime(current().fiveHour.resetAt, false)}</text>
+              <text fg={theme().muted}>Resets {resetTime(current().fiveHour.resetAt, false)}</text>
               <box flexDirection="row" justifyContent="space-between">
-                <text fg={theme().textMuted}>Weekly</text>
+                <text fg={theme().muted}>Weekly</text>
                 <text fg={color(current().weekly.usedPercent)}>{percent(current().weekly.usedPercent)}</text>
               </box>
-              <text fg={theme().textMuted}>Resets {resetTime(current().weekly.resetAt, true)}</text>
+              <text fg={theme().muted}>Resets {resetTime(current().weekly.resetAt, true)}</text>
             </>
           )}
         </Match>
@@ -73,25 +74,35 @@ function UsageView(props: { api: TuiPluginApi; state: Accessor<UsageState> }) {
   )
 }
 
-const tui = async (api: TuiPluginApi) => {
+const setup = (api: Plugin.Context) => {
+  const client = api.client.rpc(CodexUsage)
   const [state, setState] = createSignal<UsageState>({ status: "hidden" })
   let activeRequest: Promise<void> | undefined
   let refreshAgain = false
   let disposed = false
+  let controller: AbortController | undefined
   const pendingRefreshes = new Set<ReturnType<typeof setTimeout>>()
 
   const refresh = () => {
+    if (disposed) return
     if (activeRequest) {
       refreshAgain = true
       return activeRequest
     }
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-    activeRequest = fetchUsage(controller.signal)
-      .then((usage) => {
+    controller = new AbortController()
+    const request = controller
+    const timeout = setTimeout(() => request.abort(), REQUEST_TIMEOUT_MS)
+    activeRequest = client.get({}, {
+      signal: request.signal,
+      location: api.location ?? api.data.location.default(),
+    })
+      .then((result) => {
+        if (disposed) return
+        const usage = result as Usage | null
         setState(usage ? { status: "ready", usage } : { status: "hidden" })
       })
       .catch((error: unknown) => {
+        if (disposed) return
         const message =
           error instanceof Error && error.name === "AbortError"
             ? "Usage request timed out"
@@ -103,6 +114,7 @@ const tui = async (api: TuiPluginApi) => {
       .finally(() => {
         clearTimeout(timeout)
         activeRequest = undefined
+        controller = undefined
         if (refreshAgain && !disposed) {
           refreshAgain = false
           void refresh()
@@ -123,34 +135,36 @@ const tui = async (api: TuiPluginApi) => {
     }
   }
 
-  api.slots.register({
-    order: 150,
-    slots: {
-      sidebar_content() {
-        return (
-          <Show when={state().status !== "hidden"}>
-            <UsageView api={api} state={state} />
-          </Show>
-        )
-      },
-    },
+  const removeSlot = api.ui.slot({
+    append: "sidebar.content",
+    render: () => (
+      <Show when={state().status !== "hidden"}>
+        <UsageView api={api} state={state} />
+      </Show>
+    ),
   })
 
   const interval = setInterval(() => void refresh(), REFRESH_INTERVAL_MS)
-  const stopIdleRefresh = api.event.on("session.idle", schedulePostSessionRefresh)
-  api.lifecycle.onDispose(() => {
+  const stopIdleRefresh = api.data.on("session.idle", schedulePostSessionRefresh)
+  const stopCredentialRefresh = api.data.on("credential.updated", () => void refresh())
+  const stopAccountRefresh = api.data.on("credential.switched", () => void refresh())
+
+  void refresh()
+  return () => {
     disposed = true
     refreshAgain = false
     clearInterval(interval)
+    controller?.abort()
     for (const timer of pendingRefreshes) clearTimeout(timer)
     pendingRefreshes.clear()
     stopIdleRefresh()
-  })
-
-  void refresh()
+    stopCredentialRefresh()
+    stopAccountRefresh()
+    removeSlot()
+  }
 }
 
-export default {
+export default Plugin.define({
   id: "codex-usage-sidebar",
-  tui,
-} satisfies TuiPluginModule & { id: string }
+  setup,
+})

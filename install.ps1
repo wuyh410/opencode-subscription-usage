@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ManagedSpec = "./tui-plugins/codex-usage-sidebar.js"
+$ManagedSpec = "./local-plugins/codex-usage"
 $SourcePlugin = Join-Path $PSScriptRoot "dist/tui.js"
 $SourceUsageModule = Join-Path $PSScriptRoot "dist/codex-usage.js"
 $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
@@ -34,7 +34,7 @@ function Find-StringEnd {
       return $i
     }
   }
-  throw "Unterminated string in TUI config."
+  throw "Unterminated string in OpenCode config."
 }
 
 function Find-NextToken {
@@ -61,7 +61,7 @@ function Find-NextToken {
       if ($Text[$i + 1] -eq '*') {
         $end = $Text.IndexOf('*/', $i + 2)
         if ($end -lt 0) {
-          throw "Unterminated comment in TUI config."
+          throw "Unterminated comment in OpenCode config."
         }
         $i = $end + 2
         continue
@@ -96,7 +96,7 @@ function Find-MatchingBracket {
       if ($Text[$i + 1] -eq '*') {
         $end = $Text.IndexOf('*/', $i + 2)
         if ($end -lt 0) {
-          throw "Unterminated comment in TUI config."
+          throw "Unterminated comment in OpenCode config."
         }
         $i = $end + 1
         continue
@@ -111,7 +111,7 @@ function Find-MatchingBracket {
       }
     }
   }
-  throw "Unterminated plugin array in TUI config."
+  throw "Unterminated plugins array in OpenCode config."
 }
 
 function Get-ConfigLocations {
@@ -130,10 +130,10 @@ function Get-ConfigLocations {
       if ($braceDepth -eq 1 -and $bracketDepth -eq 0) {
         $name = $Text.Substring($start, $i - $start + 1) | ConvertFrom-Json
         $colon = Find-NextToken $Text ($i + 1)
-        if ($name -eq 'plugin' -and $colon -lt $Text.Length -and $Text[$colon] -eq ':') {
+        if ($name -eq 'plugins' -and $colon -lt $Text.Length -and $Text[$colon] -eq ':') {
           $pluginStart = Find-NextToken $Text ($colon + 1)
           if ($pluginStart -ge $Text.Length -or $Text[$pluginStart] -ne '[') {
-            throw "Cannot update non-array plugin setting in TUI config."
+            throw "Cannot update non-array plugins setting in OpenCode config."
           }
           $pluginEnd = Find-MatchingBracket $Text $pluginStart
         }
@@ -152,7 +152,7 @@ function Get-ConfigLocations {
       if ($Text[$i + 1] -eq '*') {
         $end = $Text.IndexOf('*/', $i + 2)
         if ($end -lt 0) {
-          throw "Unterminated comment in TUI config."
+          throw "Unterminated comment in OpenCode config."
         }
         $i = $end + 1
         continue
@@ -173,7 +173,7 @@ function Get-ConfigLocations {
   }
 
   if ($rootClose -lt 0) {
-    throw "Cannot find the root object in TUI config."
+    throw "Cannot find the root object in OpenCode config."
   }
 
   return [pscustomobject]@{
@@ -212,7 +212,7 @@ function Find-LastSignificantCharacter {
       if ($Text[$i + 1] -eq '*') {
         $commentEnd = $Text.IndexOf('*/', $i + 2)
         if ($commentEnd -lt 0) {
-          throw "Unterminated comment in TUI config."
+          throw "Unterminated comment in OpenCode config."
         }
         $i = $commentEnd + 1
         continue
@@ -294,11 +294,11 @@ function Add-PluginEntry {
   }
 
   if ($layout.IsOwnLine) {
-    $property = "$($layout.Indent)$indentUnit`"plugin`": [$quotedSpec]$eol"
+    $property = "$($layout.Indent)$indentUnit`"plugins`": [$quotedSpec]$eol"
   } elseif ($hasProperty) {
-    $property = " `"plugin`": [$quotedSpec]"
+    $property = " `"plugins`": [$quotedSpec]"
   } else {
-    $property = "`"plugin`": [$quotedSpec]"
+    $property = "`"plugins`": [$quotedSpec]"
   }
   return Insert-Text $Text $insertAt $property
 }
@@ -313,8 +313,8 @@ if (-not (Test-Path -LiteralPath $SourceUsageModule -PathType Leaf)) {
   throw "Built plugin module not found: $SourceUsageModule"
 }
 
-$jsoncPath = Join-Path $ConfigDir "tui.jsonc"
-$jsonPath = Join-Path $ConfigDir "tui.json"
+$jsoncPath = Join-Path $ConfigDir "opencode.jsonc"
+$jsonPath = Join-Path $ConfigDir "opencode.json"
 $configPath = if (Test-Path -LiteralPath $jsoncPath -PathType Leaf) { $jsoncPath } else { $jsonPath }
 $newContent = $null
 
@@ -323,18 +323,18 @@ if (Test-Path -LiteralPath $configPath -PathType Leaf) {
   try {
     $config = $content | ConvertFrom-Json
   } catch {
-    throw "Cannot update invalid TUI config: $configPath`n$($_.Exception.Message)"
+    throw "Cannot update invalid OpenCode config: $configPath`n$($_.Exception.Message)"
   }
 
-  $pluginProperty = $config.PSObject.Properties['plugin']
+  $pluginProperty = $config.PSObject.Properties['plugins']
   if ($pluginProperty -and -not ($pluginProperty.Value -is [System.Array])) {
-    throw "Cannot update non-array plugin setting: $configPath"
+    throw "Cannot update non-array plugins setting: $configPath"
   }
 
   $alreadyInstalled = $false
   if ($pluginProperty) {
     foreach ($entry in $pluginProperty.Value) {
-      if ($entry -is [string] -and $entry -eq $ManagedSpec) {
+      if (($entry -is [string] -and $entry -eq $ManagedSpec) -or $entry.package -eq $ManagedSpec) {
         $alreadyInstalled = $true
         break
       }
@@ -346,14 +346,20 @@ if (Test-Path -LiteralPath $configPath -PathType Leaf) {
     $newContent = Add-PluginEntry $content $locations $ManagedSpec
   }
 } else {
-  $newContent = "{`n  `"`$schema`": `"https://opencode.ai/tui.json`",`n  `"plugin`": [`n    `"$ManagedSpec`"`n  ]`n}`n"
+  $newContent = "{`n  `"`$schema`": `"https://opencode.ai/config.json`",`n  `"plugins`": [`n    `"$ManagedSpec`"`n  ]`n}`n"
 }
 
-$pluginDir = Join-Path $ConfigDir "tui-plugins"
-$pluginPath = Join-Path $pluginDir "codex-usage-sidebar.js"
+$pluginDir = Join-Path $ConfigDir "local-plugins/codex-usage"
 [System.IO.Directory]::CreateDirectory($pluginDir) | Out-Null
-Copy-Item -LiteralPath $SourcePlugin -Destination $pluginPath -Force
-Copy-Item -LiteralPath $SourceUsageModule -Destination (Join-Path $pluginDir "codex-usage.js") -Force
+$distDir = Join-Path $pluginDir "dist"
+[System.IO.Directory]::CreateDirectory($distDir) | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "dist") | Copy-Item -Destination $distDir -Recurse -Force
+foreach ($entry in @("index.js", "tui.js")) {
+  Copy-Item -LiteralPath (Join-Path $PSScriptRoot $entry) -Destination (Join-Path $pluginDir $entry) -Force
+}
+$package = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "package.json") | ConvertFrom-Json
+$manifest = [ordered]@{ name = $package.name; version = $package.version; type = $package.type; exports = $package.exports }
+[System.IO.File]::WriteAllText((Join-Path $pluginDir "package.json"), ($manifest | ConvertTo-Json -Depth 10), $Utf8NoBom)
 
 if ($null -ne $newContent) {
   [System.IO.Directory]::CreateDirectory($ConfigDir) | Out-Null
