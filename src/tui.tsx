@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { Plugin } from "@opencode/plugin/tui"
+import type { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch, type Accessor } from "solid-js"
 import type { Usage } from "./codex-usage.js"
 import { CodexUsage } from "./rpc.js"
@@ -164,7 +164,7 @@ const setup = (api: Plugin.Context) => {
   }
 }
 
-export default Plugin.define({
+export default {
   id: "codex-usage-sidebar",
   setup,
-})
+} satisfies Plugin.Definition

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
+import { pathToFileURL } from "node:url"
 import test from "node:test"
 import { parse } from "jsonc-parser"
 import { install, MANAGED_SPEC, uninstall } from "../lib/installer.mjs"
@@ -40,6 +41,13 @@ test("install and uninstall preserve JSONC comments and unrelated plugins", asyn
     }
     assert.equal(await readFile(first.pluginPath, "utf8").then((value) => value.length > 0), true)
     assert.equal(await readFile(first.usagePath, "utf8").then((value) => value.length > 0), true)
+    // Import the copied server entrypoint outside the checkout: it must not rely on node_modules.
+    const entry = pathToFileURL(join(configDir, MANAGED_SPEC, "index.js")).href
+    const loaded = spawnSync(process.execPath, ["--input-type=module", "-e", `
+      const { default: plugin } = await import(${JSON.stringify(entry)});
+      if (plugin.id !== "codex-usage" || typeof plugin.setup !== "function") process.exit(1);
+    `], { encoding: "utf8" })
+    assert.equal(loaded.status, 0, loaded.stderr)
 
     await uninstall({ configDir })
     const uninstalledText = await readFile(configPath, "utf8")

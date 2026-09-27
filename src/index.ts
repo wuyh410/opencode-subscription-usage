@@ -1,8 +1,8 @@
-import { Plugin } from "@opencode/plugin"
+import type { Plugin } from "@opencode/plugin"
 import { fetchUsage } from "./codex-usage.js"
 import { CodexUsage } from "./rpc.js"
 
-export default Plugin.define({
+export default {
   id: "codex-usage",
   async setup(ctx) {
     await ctx.rpc.register(CodexUsage, {
@@ -13,4 +13,4 @@ export default Plugin.define({
       },
     })
   },
-})
+} satisfies Plugin.Plugin

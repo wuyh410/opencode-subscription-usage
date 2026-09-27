@@ -1,4 +1,4 @@
-import { Rpc } from "@opencode/plugin/rpc"
+import type { Rpc } from "@opencode/plugin/rpc"
 
 const window = {
   type: "object",
@@ -7,7 +7,7 @@ const window = {
   additionalProperties: false,
 } as const
 
-export const CodexUsage = Rpc.define({
+export const CodexUsage = {
   id: "codex-usage",
   methods: {
     get: {
@@ -26,4 +26,4 @@ export const CodexUsage = Rpc.define({
     },
   },
   events: {},
-})
+} as const satisfies Rpc.PortableDefinition
