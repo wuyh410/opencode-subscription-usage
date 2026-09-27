@@ -2,6 +2,7 @@
 import type { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch, type Accessor } from "solid-js"
 import type { Usage } from "./codex-usage.js"
+import type { GoUsage } from "./go-usage.js"
 import { CodexUsage } from "./rpc.js"
 
 const REFRESH_INTERVAL_MS = 60 * 1000
@@ -10,10 +11,11 @@ const POST_SESSION_REFRESH_DELAYS_MS = [2_000, 15_000]
 
 type UsageState =
   | { status: "hidden" }
-  | { status: "ready"; usage: Usage }
+  | { status: "ready"; usage: Usage | GoUsage }
   | { status: "error"; message: string }
 
-function resetTime(epochSeconds: number, weekly: boolean) {
+function resetTime(epochSeconds: number | null, weekly: boolean) {
+  if (epochSeconds === null) return "after first use"
   const options: Intl.DateTimeFormatOptions = weekly
     ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
     : { hour: "2-digit", minute: "2-digit" }
@@ -21,10 +23,10 @@ function resetTime(epochSeconds: number, weekly: boolean) {
 }
 
 function percent(value: number) {
-  return `${Math.round(value)}% used`
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)}% used`
 }
 
-function UsageView(props: { api: Plugin.Context; state: Accessor<UsageState> }) {
+function UsageView(props: { api: Plugin.Context; state: Accessor<UsageState>; title: string }) {
   const theme = () => props.api.theme.text
   const error = createMemo(() => {
     const state = props.state()
@@ -33,6 +35,10 @@ function UsageView(props: { api: Plugin.Context; state: Accessor<UsageState> }) 
   const usage = createMemo(() => {
     const state = props.state()
     return state.status === "ready" ? state.usage : undefined
+  })
+  const monthly = createMemo(() => {
+    const value = usage()
+    return value && "monthly" in value ? (value as GoUsage).monthly : undefined
   })
   const color = (value: number) => {
     if (value >= 90) return theme().feedback.error.base
@@ -43,7 +49,7 @@ function UsageView(props: { api: Plugin.Context; state: Accessor<UsageState> }) 
   return (
     <box>
       <text fg={theme().base}>
-        <b>Codex usage</b>
+        <b>{props.title}</b>
       </text>
       <Switch>
         <Match when={error()}>
@@ -66,6 +72,17 @@ function UsageView(props: { api: Plugin.Context; state: Accessor<UsageState> }) 
                 <text fg={color(current().weekly.usedPercent)}>{percent(current().weekly.usedPercent)}</text>
               </box>
               <text fg={theme().muted}>Resets {resetTime(current().weekly.resetAt, true)}</text>
+              <Show when={monthly()}>
+                {(month) => (
+                  <>
+                    <box flexDirection="row" justifyContent="space-between">
+                      <text fg={theme().muted}>Monthly</text>
+                      <text fg={color(month().usedPercent)}>{percent(month().usedPercent)}</text>
+                    </box>
+                    <text fg={theme().muted}>Resets {resetTime(month().resetAt, true)}</text>
+                  </>
+                )}
+              </Show>
             </>
           )}
         </Match>
@@ -76,7 +93,8 @@ function UsageView(props: { api: Plugin.Context; state: Accessor<UsageState> }) 
 
 const setup = (api: Plugin.Context) => {
   const client = api.client.rpc(CodexUsage)
-  const [state, setState] = createSignal<UsageState>({ status: "hidden" })
+  const [codexState, setCodexState] = createSignal<UsageState>({ status: "hidden" })
+  const [goState, setGoState] = createSignal<UsageState>({ status: "hidden" })
   let activeRequest: Promise<void> | undefined
   let refreshAgain = false
   let disposed = false
@@ -92,26 +110,30 @@ const setup = (api: Plugin.Context) => {
     controller = new AbortController()
     const request = controller
     const timeout = setTimeout(() => request.abort(), REQUEST_TIMEOUT_MS)
-    activeRequest = client.get({}, {
+    const options = {
       signal: request.signal,
       location: api.location ?? api.data.location.default(),
-    })
-      .then((result) => {
-        if (disposed) return
-        const usage = result as Usage | null
-        setState(usage ? { status: "ready", usage } : { status: "hidden" })
-      })
-      .catch((error: unknown) => {
-        if (disposed) return
-        const message =
-          error instanceof Error && error.name === "AbortError"
-            ? "Usage request timed out"
-            : error instanceof Error
-              ? error.message
-              : String(error)
-        setState({ status: "error", message })
-      })
-      .finally(() => {
+    }
+    const load = (call: Promise<Usage | GoUsage | null>, update: (state: UsageState) => void) =>
+      call
+        .then((usage) => {
+          if (!disposed) update(usage ? { status: "ready", usage } : { status: "hidden" })
+        })
+        .catch((error: unknown) => {
+          if (disposed) return
+          const message =
+            error instanceof Error && error.name === "AbortError"
+              ? "Usage request timed out"
+              : error instanceof Error
+                ? error.message
+                : String(error)
+          update({ status: "error", message })
+        })
+
+    activeRequest = Promise.all([
+      load(client.get({}, options) as Promise<Usage | null>, setCodexState),
+      load(client.go({}, options) as Promise<GoUsage | null>, setGoState),
+    ]).then(() => undefined).finally(() => {
         clearTimeout(timeout)
         activeRequest = undefined
         controller = undefined
@@ -138,8 +160,15 @@ const setup = (api: Plugin.Context) => {
   const removeSlot = api.ui.slot({
     append: "sidebar.content",
     render: () => (
-      <Show when={state().status !== "hidden"}>
-        <UsageView api={api} state={state} />
+      <Show when={codexState().status !== "hidden" || goState().status !== "hidden"}>
+        <box>
+          <Show when={codexState().status !== "hidden"}>
+            <UsageView api={api} state={codexState} title="Codex usage" />
+          </Show>
+          <Show when={goState().status !== "hidden"}>
+            <UsageView api={api} state={goState} title="OpenCode Go usage" />
+          </Show>
+        </box>
       </Show>
     ),
   })

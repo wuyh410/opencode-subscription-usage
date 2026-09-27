@@ -1,7 +1,7 @@
 {
   "name": "opencode-codex-usage",
-  "version": "0.3.0",
-  "description": "Display ChatGPT Codex 5-hour and weekly usage in the OpenCode sidebar.",
+  "version": "0.4.0",
+  "description": "Display ChatGPT Codex and OpenCode Go subscription usage in the OpenCode sidebar.",
   "type": "module",
   "exports": {
     ".": "./index.js",
